@@ -1,0 +1,21 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-control
+  namespace: locust
+spec:
+  # Service of type ClusterIP
+  type: ClusterIP
+  # Same ports and names found in the control-deployment.yaml file
+  ports:
+    - name: user-interface
+      port: 8089
+      targetPort: user-interface
+    - name: system
+      port: 5557
+      targetPort: system
+  selector:
+    app: locust
+    # Only selecting the control, not workers
+    component: control

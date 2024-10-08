@@ -1,0 +1,54 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-control
+  # Resource is associated with the previously created namespace.
+  namespace: locust
+spec:
+  # Only 1 control pod is needed.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+      component: control
+  template:
+    metadata:
+      labels:
+        app: locust
+        component: control
+    spec:
+      containers:
+        - name: locust-control
+          # Use our custom build image from ECR containing our tests.
+          image: 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
+          # Args will be different between control and workers.
+          # Notice the input test file matches one of the scripts included in
+          # the root directory of the custom image we built (script1.py).
+          # Your target endpoint should be specified below as well.
+          args:
+            [
+              "-f=./script1.py",
+              "--master",
+              "-u=1",
+              "-r=1",
+              "-t=30s",
+              "-H=http://your-target-endpoint.com"
+            ]
+          # Locust control needs to open 2 ports:
+          # 8089 so we can eventually access the web interface to run tests and
+          # observe metrics, and
+          # 5557 so it can communicate with worker pods.
+          ports:
+            - name: user-interface
+              containerPort: 8089
+            - name: system
+              containerPort: 5557
+          # Set the resources and the limits for the pod.
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 250m
+            limits:
+              memory: 256Mi
+              cpu: 250m

@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-control
+  # Resource is associated with the previously created namespace.
+  namespace: locust
+spec:
+  # Only 1 control pod is needed.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+      component: control
+  template:
+    metadata:
+      labels:
+        app: locust
+        component: control
+    spec:
+      containers:
+        - name: locust-control
+          # Latest public image from Locustio.
+          image: locustio/locust:master
+          # Args needed to start Locust as control.
+          # Notice the input test file matches the mountPath specified below.
+          # Your target endpoint should be specified below as well.
+          args:
+            [
+              "-f=/data/script1.py",
+              "--master",
+              "-u=1",
+              "-r=1",
+              "-t=30s",
+              "-H=http://www.your-target-endpoint.com"
+            ]
+          # Locust control needs to open 2 ports:
+          # 8089 so we can eventually access the web interface to run tests and
+          # observe metrics, and
+          # 5557 so it can communicate with worker pods.
+          ports:
+            - name: user-interface
+              containerPort: 8089
+            - name: system
+              containerPort: 5557
+          # Set the resources and the limits for the pod.
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 250m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+          # Mount the volume, determine which test to use from ConfigMap (script1),
+          # and create a script1.py file with the contents and place it inside a 
+          # data directory.
+          volumeMounts:
+            - name: config
+              subPath: script1
+              mountPath: /data/script1.py
+      # Mapping the ConfigMap to a volume.
+      volumes:
+        - name: config
+          configMap:
+            name: config

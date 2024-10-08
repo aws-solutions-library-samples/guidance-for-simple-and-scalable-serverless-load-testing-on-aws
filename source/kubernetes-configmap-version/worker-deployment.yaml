@@ -1,0 +1,54 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-worker
+  # Resource is associated with the previously created namespace.
+  namespace: locust
+spec:
+  # Specify the required number of worker pods.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: locust
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: locust
+        component: worker
+    spec:
+      containers:
+        - name: locust-worker
+          # Latest public image from Locustio.
+          image: locustio/locust:master
+          # Args will be different between control and workers.
+          # Notice the input test file matches the mountPath specified below.
+          # Notice the master host is being set as control-locust from our 
+          # control deployment.
+          args:
+            [
+              "-f=/data/script1.py",
+              "--worker",
+              "--master-host=locust-control"
+            ]
+          # Notice no ports need to be opened for workers.
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 250m
+            limits:
+              memory: 256Mi
+              cpu: 250m
+          # Mount the volume, determine which test to use from ConfigMap (script1),
+          # and create a script1.py file with the contents and place it inside a 
+          # data directory.
+          volumeMounts:
+            - name: config
+              subPath: script1
+              mountPath: /data/script1.py
+      # Mapping the ConfigMap to a volume.
+      volumes:
+        - name: config
+          configMap:
+            name: config
