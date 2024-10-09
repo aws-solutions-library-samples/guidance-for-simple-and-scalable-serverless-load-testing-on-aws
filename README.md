@@ -26,7 +26,7 @@
 
 ## Overview
 
-Small and medium-sized game studios often perceive load testing as a complex and costly activity where the challenges and time investment far outweigh the benefits. Adding to that perception are solutions that are tailored towards financially sound, large enterprises and companies with dedicated load testing teams and in-house expertise. However, load testing isnâ€™t reserved only for high-profile releases or big studios. They can provide valuable insights for studios of any size, without requiring massive budgets or infrastructure. Even modest load tests, simulating hundreds or a few thousand concurrent users can uncover performance bottlenecks, identify server scaling issues, and validate key systems.
+Small and medium-sized game studios often perceive load testing as a complex and costly activity where the challenges and time investment far outweigh the benefits. Adding to that perception are solutions that are tailored towards financially sound, large enterprises and companies with dedicated load testing teams and in-house expertise. Load testing shouldn't be reserved only for high-profile releases or big studios. They can provide valuable insights to studios of any size, without requiring massive budgets or infrastructure. Even modest load tests, simulating hundreds or a few thousand concurrent users can uncover performance bottlenecks, identify server scaling issues, and validate key systems.
 
 The following solution is simple, secure, fully-managed and scalable. It is meant to introduce teams to load testing, help them run large scale tests, gain actionable insights and confidence, understand the value in the practice, and eventually grow and shape their own load testing strategy. The solution centers around [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/), [AWS Fargate](https://aws.amazon.com/fargate/), and open-source load testing framework [Locust](https://locust.io/), and can be built upon as the team's proficiency and load testing program grows. For instance, teams can eventually take over the management of the underlying nodes to unlock further optimizations and cost savings, can add persistence layers (InfluxDB, Prometheus, Graphite, or AWS managed services), add more robust monitoring and observability layers (Grafana, New Relic, AWS CloudWatch), and even enhance alerting and notification capabilities (posting to SNS topics, sending email/SMS, posting to Slack channels).
 
@@ -40,7 +40,7 @@ Note that while multiple availability zones provide the design with high availab
 
 ## Prerequisites
 
-Please take the time to install the following dependencies and to make sure you meet the following prerequisites before moving on:
+Please take the time to install the following dependencies and to make sure you meet the prerequisites before moving on:
 
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), a powerful command-line tool provided by Amazon Web Services (AWS) that allows you to interact with various AWS services directly from your computer's terminal or command prompt.
 - [Terraform](https://developer.hashicorp.com/terraform/install), an open-source infrastructure as code (IaC) software tool from HashiCorp that enables users to define and provision cloud infrastructure resources in a declarative way.
@@ -63,8 +63,8 @@ The following Terraform files are provided:
 | 2-providers.tf | Specifies information about the plugins that allow Terraform to interact with different platforms, services, and infrastructure components |
 | 3-vpc.tf | Creates a dedicated load testing VPC and the VPC's default security group |
 | 4-subnets.tf | Outlines the public and private subnets to create |
-| 5-gateways.tf | Creates the Internet Gateway, NAT Gatewaysm and Elastic IPs used |
-| 6-route-tables.tf | Specifies route tables for the subnets and the approprate routes to the Internet Gatewat and NAT Gateways |
+| 5-gateways.tf | Creates the Internet Gateway, NAT Gateways, and Elastic IPs used |
+| 6-route-tables.tf | Specifies route tables for the subnets and the appropriate routes to the Internet Gateway and NAT Gateways |
 | 7-eks.tf | Creates the Amazon EKS cluster and requires components |
 | 8-fargate-profile.tf | Sets up the Fargate profile that defines the namespace and private subnets that workloads are to be launched in |
 
@@ -157,7 +157,7 @@ The deployments files for the control and worker pods (```control-deployment.yam
 
 In custom Docker image deployments, a Docker image is created from the official Locust Docker image and the load testing scripts are added to it. This approach might be better suited for dealing with multiple large, static scripts or suites of tests that need to be run often and for longer periods. While there is no need for ConfigMaps or mounting volumes, this flow introduces added prerequisites:
 
-- Install [Docker](https://docs.docker.com/desktop/install/) to be able to build, run and manage Docker containers and images.
+- Install [Docker](https://docs.docker.com/engine/install/) to be able to build, run and manage Docker containers and images.
 - Create an [Elastic Container Registry (ECR) repository](https://aws.amazon.com/ecr/) to be able to store and deploy Docker container images within the AWS ecosystem. Create a private ECR repository and give it the name ```locust```. Note that ECR provides a free tier of the service and no charges will be incurred as a result of this step. 
 
 Navigate to the ```source/kubernetes-custom-image-version/``` folder in the terminal. The ```Dockerfile``` defines the base image to use (```locustio/locust:master```) and the load testing scripts to include. You will find two sample load test scripts, ```script1.py``` and ```script2.py```. These should be replaced with your own custom load testing scripts, and they should be added in the Dockerfile. Build the image by running: 
@@ -168,7 +168,7 @@ Tag your newly created image next. **Make sure you add your locust ECR registryâ
 ```
 docker tag locust:master 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
 ```
-Now that the image has been created and tagged, the Docker client needs to authenticate with the ECR registry before attempting to push the image. **Make sure you change the region and base ECR registry URI to match yours before running the commandl**:
+Now that the image has been created and tagged, the Docker client needs to authenticate with the ECR registry before attempting to push the image. **Make sure you change the region and base ECR registry URI to match yours before running the command**:
 ```
 aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 111122223333.dkr.ecr.us-east-2.amazonaws.com
 ```
