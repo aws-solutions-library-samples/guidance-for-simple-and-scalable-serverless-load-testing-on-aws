@@ -7,9 +7,9 @@
 - [Deployment steps](#deployment-steps)
     * [1. Creating the infrastructure with Terraform](#1-creating-the-infrastructure-with-terraform)
     * [2. Creating a Locust load testing script](#2-creating-a-locust-load-testing-script)
-    * [3. Deploying the Kubernetes resource files](#3-deploying-the-kubernetes-resource-files)
-        + [3a. ConfigMap deployment](#3a-configmap-deployment)
-        + [3b. Custom Docker image deployment](#3b-custom-docker-image-deployment)
+    * [3. Configuring the Kubernetes resource files](#3-configuring-the-kubernetes-resource-files)
+        + [3a. ConfigMap deployments](#3a-configmap-deployments)
+        + [3b. Custom Docker image deployments](#3b-custom-docker-image-deployments)
     * [5. Creating a ClusterIP service](#5-creating-a-clusterip-service)
     * [6. Deploying the resources](#-6deploying-the-resources)
 - [Deployment validation](#deployment-validation)
@@ -109,11 +109,14 @@ class test(HttpUser):
         self.client.get("/")
 ```
 
-Depending on the deployment method used, the script will be included later through a ConfigMap file, or be added into a custom Docker image. In any case, **a custom load testing script that accurately simulates the real-world traffic patterns and user behavior of the system being tested must be created and provided**, as the quality and accuracy of the load testing results are heavily influenced by it.
+Depending on the deployment method used, the script will be included later through a ConfigMap file, or be added into a custom Docker image. 
+
+> [!IMPORTANT]
+> A custom load testing script that accurately simulates the real-world traffic patterns and user behavior of the system being tested **must** be created and provided, as the quality and accuracy of the load testing results are heavily influenced by it.
 
 </br>
 
-### 3. Deploying the Kubernetes resource files 
+### 3. Configuring the Kubernetes resource files 
             
 The following Kubernetes resources files are provided:
 
@@ -131,19 +134,52 @@ There are many ways to create deployments. This guide focuses on two:
 - Using **ConfigMap** to provide the Pods with the Locust load testing script, and
 - Building a custom **Docker image** from the base Locust image, containing multiple Locust testing scripts inside.
 
-The first approach might be useful when dealing with one or more small scripts that might change frequently, while the second might be better suited for dealing with multiple large, static scripts for prolonged tests.
+</br>
+
+### 3a. ConfigMap deployments
+
+In ConfigMap deployments, the load testing script is provided to the Locust client via a Kubernetes resource file called **ConfigMap**. This approach might be particularly useful when dealing with relatively small scripts that are frequently changing. As seen in the ```source/kubernetes-configmap-version/configmap.yaml``` file, the scripts are defined as key value pairs (```script1``` and ```script2```) and multiple scripts can be added to the same ConfigMap file.
+
+> [!IMPORTANT]
+> Remember to replace the sample load testing scripts with your own, tailored specifically for the system you are testing.
+
+The deployments files for the control and worker pods (```source/kubernetes-configmap-version/control-deployment.yaml``` and ```source/kubernetes-configmap-version/worker-deployment.yaml```) map the ConfigMap to a volume and mount the volume on the container. The key in the ConfigMap associated with the desired script is specified, as is the location in the volume to save it to.
+
+Lastly, the path of the script saved to the volume in the container is passed to the Locust client when initialized.
 
 </br>
 
-### 3a. ConfigMap deployment
+### 3b. Custom Docker image deployments
 
-TBD
+In custom Docker image deployments, a Docker image is created from the official Locust Docker image and the load testing scripts are added to it. This approach might be better suited for dealing with multiple large, static scripts or suites of tests that need to be run often and for longer periods. While there is no need for ConfigMaps or mounting volumes, this flow introduces added prerequisites:
 
-</br>
+- Install [Docker](https://docs.docker.com/desktop/install/) to be able to build, run and manage Docker containers and images.
+- Create an [Elastic Container Registry (ECR) repository](https://aws.amazon.com/ecr/) to be able to store and deploy Docker container images within the AWS ecosystem. Create a private ECR repository and give it the name ```locust```. Note that ECR provides a free tier of the service and no charges will be incurred as a result of this step. 
 
-### 3b. Custom Docker image deployment
+The Docker file (```source/kubernetes-custom-image-version/Dockerfile```) defines the base image to use (```locustio/locust:master```) and the load testing scripts to include. Once your scripts are added to the Dockerfile, build the image by opening a new terminal window, navigating to the folder that contains your Dockerfile and test scripts, and run 
+```
+docker build -f ./Dockerfile --platform linux/amd64 -t locust:master .
+``` 
+Next, tag your newly created image. **Make sure you add your locust ECR registry’s URI to the command below**:
+```
+docker tag locust:master 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
+```
+Now that our image has been created and tagged, we need to make sure that our Docker client is authenticated with our ECR registry before we attempt to push the image. **Make sure you change the region and base ECR registry URI to match yours before entering the command in the terminal**:
+```
+aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 111122223333.dkr.ecr.us-east-2.amazonaws.com
+```
+Push the image to the ECR registry after successfully authenticating. **Make sure you change the ECR registry URI to match your own**:
+```
+docker push 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
+```
 
-TBD
+
+
+
+
+
+
+
 
 </br>
 
