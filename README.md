@@ -30,7 +30,7 @@ Small and medium-sized game studios often perceive load testing as a complex and
 
 The following solution is simple, secure, fully-managed and scalable. It is meant to introduce teams to load testing, help them run large scale tests, gain actionable insights and confidence, understand the value in the practice, and eventually grow and shape their own load testing strategy. The solution centers around [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/), [AWS Fargate](https://aws.amazon.com/fargate/), and open-source load testing framework [Locust](https://locust.io/), and can be built upon as the team's proficiency and load testing program grows. For instance, teams can eventually take over the management of the underlying nodes to unlock further optimizations and cost savings, can add persistence layers (InfluxDB, Prometheus, Graphite, or AWS managed services), add more robust monitoring and observability layers (Grafana, New Relic, AWS CloudWatch), and even enhance alerting and notification capabilities (posting to SNS topics, sending email/SMS, posting to Slack channels).
 
-![Architecture Diagram](ArchitectureDiagram.png)
+![Architecture Diagram](./assets/images/ArchitectureDiagram.png)
 
 The architecture diagram above shows an EKS cluster that could span multiple availability zones. Each availability zone could contain private and public subnets. The EKS cluster has a Fargate profile that includes all private subnets, and Fargate-managed EC2 instances are allocated within them, which contain the deployed Locust pods. There is one control pod and multiple workers, and a ClusterIP service that provides pods with internal IP addresses. The ClusterIP service allows for load balanced traffic, as well as communication between the pods in the cluster without exposing them directly to the internet. NAT Gateways provide the workloads in private subnets with the means to generate traffic towards an external endpoint. The load test operator manages the cluster and test through the terminal of their local machine, and interacts with the Locust control pod’s web dashboard via port forwarding through their local browser.
 
@@ -176,6 +176,8 @@ Push the image to the ECR registry after successfully authenticating. **Make sur
 ```
 docker push 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
 ```
+The image should appear shortly:
+![Architecture Diagram](./assets/images/ECR.png)
 
 **Remember to:**
 - Replace ```script1.py``` and ```script2.py``` with your own load testing scripts
@@ -222,27 +224,82 @@ LAST SEEN  TYPE    REASON             OBJECT                                 MES
 32s        Normal  SuccessfulCreate   replicaset/locust-control-6f4b76c45f   Created pod: locust-control-6f4b76c45f-wfm7r
 32s        Normal  ScalingReplicaSet  deployment/locust-control              Scaled up replica set locust-control-6f4b76c45f to 1
 50s        Normal  Scheduled          pod/locust-worker-7fd7bdb544-9rsz6     Successfully assigned locust/locust-worker-7fd7bdb544-9rsz6 to fargate-ip-192-168-166-239.us-east-2.compute.internal
-...
 ```
 You can monitor the locust-control pod to see when the endpoints get assigned (due to the ClusterIP service deployed) with the following command:
-
-% kubectl get endpoints -n locust
+```
+kubectl get endpoints -n locust
 
 NAME             ENDPOINTS                                 AGE
 locust-control   192.168.111.61:5557,192.168.111.61:8089   4m20s
-...
+```
 
 </br>
 
 ## Accessing the Locust dashboard
 
+Once the locust-control pod has its endpoints assigned (as seen above), the dashboard is ready to be accessed. While the service is only deployed internally and not accessible from the outside, we can take advantage of the port-forwarding capabilities in kubectl. The kubectl ```port-forward``` command creates a secure, temporary TCP connection between a local port on your machine and a port on a specific Pod running in your Kubernetes cluster, which allows you to access and explore the services running within the cluster:
+```
+kubectl port-forward svc/locust-control 8089 -n locust
+
+Forwarding from 127.0.0.1:8089 → 8089
+Forwarding from [::1]:8089 → 8089
+Handling connection for 8089
+```
+
+With port-forwarding in place, we should be able to open a browser, go to ```localhost:8089```, and see the Locust dashboard:
+![Architecture Diagram](./assets/images/LocustDashboard.png)
+
+Notice the ready status and the 2 workers connected to the control client, specified by the value of the ```replica``` field in the ```worker-deployment.yaml``` file.
+
 </br>
 
 ## Starting and stopping a test
 
+Starting a test at this point should be straightforward, with only a few parameters required. You might notice the values are pre-populated with the values we set in our ```control-deployment.yaml``` file, but can still be changed. Leave the values as-is and run a small test by clicking the start button. We should start receiving request statistics shortly:
+![Architecture Diagram](./assets/images/LocustRequestMetrics.png)
+
+The Charts tabs will also provide you with valuable data such as the requests per second your current set up is generating, the response times of your calls, and the number of unique users currently being simulated:
+![Architecture Diagram](./assets/images/LocustCharts.png)
+
+If needed, you can download the results from your test in the Download Data tab:
+![Architecture Diagram](./assets/images/LocustDownload.png)
+
+The default params in our deployment will stop the test automatically after 30 seconds. However, you can stop the test at any time by pressing the stop button at the top right corner.
+
 </br>
 
 ## Increasing and decreasing load-generating worker pods
+
+Adjusting how much load your cluster can generate (assuming you do not want to change the Locust user/spawn rate params) is a simple matter of changing the ```replica``` count on the ```worker-deployment.yaml``` file:
+```
+spec:
+  # Specify the required number of worker pods.
+  replicas: 2
+```
+Stop the test, change the replica count to ```8```, save the file and re-apply the changes:
+```
+kubectl apply -f . 
+```
+You can follow the deployment status of the new pods:
+```
+kubectl get pods -A
+
+NAMESPACE      NAME                              READY   STATUS    RESTARTS   AGE
+kube-system    coredns-78f8b4b9dd-n2kwg          1/1     Running   0          2d23h
+kube-system    coredns-78f8b4b9dd-rw8t9          1/1     Running   0          2d23h
+locust         locust-control-6f4b76c45f-h9n8w   1/1     Running   0          33m
+locust         locust-worker-7fd7bdb544-62m9d    1/1     Running   0          33m
+locust         locust-worker-7fd7bdb544-jj6l7    1/1     Running   0          33m
+locust         locust-worker-7fd7bdb544-6k2st    0/1     Pending   0          7s
+locust         locust-worker-7fd7bdb544-pg99w    0/1     Pending   0          7s
+locust         locust-worker-7fd7bdb544-q6csx    0/1     Pending   0          7s
+locust         locust-worker-7fd7bdb544-qj6pc    0/1     Pending   0          7s
+locust         locust-worker-7fd7bdb544-t8bk9.   0/1     Pending   0          7s
+locust         locust-worker-7fd7bdb544-tgpbt.   0/1     Pending   0          7s
+```
+
+After a couple of minutes or so, refresh the Locust dashboard UI, and you should see the number of worker pods connected to the control pod reflect the change in your yaml file:
+![Architecture Diagram](./assets/images/LocustUpdate.png)
 
 </br>
 
