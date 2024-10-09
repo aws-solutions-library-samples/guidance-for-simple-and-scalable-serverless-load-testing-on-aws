@@ -305,29 +305,76 @@ After a couple of minutes or so, refresh the Locust dashboard UI, and you should
 
 ## Cost considerations
 
-</br>
-
-## Cost considerations
+The cost incurred by the load testing environment will depend on the AWS services and resources used, the AWS region, the amount of time the services and resources were operational, the amount of data processed, and the specific requirements of your application or infrastructure (memory, storage, vCPUs, etc). For the purposes of this section, we will calculate the cost of a test running for 24 hours continuously with no interruptions in the US East (Ohio) region, generating a load of one million concurrent users. Note that prices below were accurate at the point of this writing but might have changed since.
 
 </br>
 
 ### Pricing calculator
 
+The [AWS Pricing Calculator](https://calculator.aws/) is a helpful tool for accurately estimating the costs of running workloads on the AWS platform. There are several key reasons why you should use the AWS Pricing Calculator:
+
+* It provides a customizable interface to model your specific usage. You can input details like the services you plan to use, the resource configurations, the expected usage volumes, and any applicable discounts or commitments. This level of granularity ensures that the cost estimates are tailored to your unique requirements, rather than relying on generic or average pricing information.
+* It is always up to date with changes to services and pricing, so you can be confident that you are working with the latest and most accurate pricing data.
+* It consolidates the information and provides a clear, comprehensive breakdown of the projected costs. This enables you to make more informed decisions about your AWS investments and budget allocation.
+
+By leveraging the AWS Pricing Calculator, you can plan your deployments with confidence, ensuring that you optimize costs and stay within your budget constraints.
+
 </br>
 
 ### EKS Fargate and pod configuration costs
+
+Using a Linux / ARM architecture for our cluster, we can aim to generate 2000 concurrent users per pod allocated with 0.25 vCPUs and 500MB of memory each. This means 500 pods, 250 GB of memory total, and 125 virtual cores for the 24 hour test:
+
+| Item | Cost | Test Total (24 hours) |
+| ------------- | ------------- | ------------- |
+| EKS cluster management fee | $0.10 / hr | $2.40 |
+| vCPU x 125 | $0.03238 / hr | $97.14 |
+| Memory x 250 GB | $0.00356 per GB per hr | $21.36 |
+| Storage (first 20 GB free) | N/A | $0 |
+| | | $120.90 |
+
+Note that the above configuration should be able to support the lower end options of data generation (see NAT Gateway Costs section below), but the vCPU and memory demands will increase as the data generation needs increase. Additional information can be found at:
+- https://aws.amazon.com/eks/pricing/
+- https://aws.amazon.com/fargate/pricing/
 
 </br>
 
 ### NAT Gateway costs
 
+When you provision a NAT gateway, you are charged for each hour the NAT gateway is available and each gigabyte of data it processes. Since the data processed will depend on how much data you send in your load test script, and how much data is returned by the target endpoint, we'll create a few scenarios for some low end and high end examples:
+
+| Item | Cost | Test Total (24 hours) |
+| ------------- | ------------- | ------------- |
+| NAT Gateway x 3 | $0.045 / hr | $3.24 |
+| 60 GB of data processed / hr  (1 KB generated per user per minute) | $0.045 / GB | $64.80 |
+| 240 GB of data processed / hr  (3 KB generated per user per minute) | $0.045 / GB | $194.40 |
+| 420 GB of data processed / hr  (7 KB generated per user per minute) | $0.045 / GB | $453.60 |
+| 600 GB of data processed / hr  (10 KB generated per user per minute) | $0.045 / GB | $648.00 |
+| 1,500 GB of data processed / hr (25 KB generated per user per minute) | $0.045 / GB | $1620.00 |
+| 3,000 GB of data processed / hr (50 KB generated per user per minute) | $0.045 / GB | $3,240.00 |
+| | | $68.04 - $3,243.24 |
+
+
 </br>
 
 ### Data transfer costs
 
+Data transfer costs can play a significant role in determining the overall design of a system. While the architecture above will incur charges due to the metrics being sent from worker pods to the control pod across different availability zones, they should be negligible (less than a dollar or two). Even more, if the final architecture deploys all subnets and pods in a single availability zone as discussed initially as an alternative, no data transfer costs will be incurred. Nevertheless, it’s a good idea to [understand data transfer costs and the situations they apply](https://aws.amazon.com/blogs/containers/understanding-data-transfer-costs-for-aws-container-services/).
+
 </br>
 
 ## Clean up
+
+When testing has concluded and you have the necessary metrics to properly evaluate your system and create a baseline for future reference, you should delete your load testing deployment to stop incurring further costs. Since resources were deployed in their own namespace, we can delete them with a single command:
+```
+kubectl delete --all deployments --namespace=locust
+```
+If desired, you can also delete the entire load testing VPC and related resources with a single Terraform command, run from the directory the Terraform files reside in:
+```
+terraform destroy
+```
+
+
 
 
 
