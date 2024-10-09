@@ -2,28 +2,28 @@
 
 ## Table of Contents
 
-1. [Overview](#overview)
-    - [Cost](#cost)
-2. [Prerequisites](#prerequisites)
-3. [Deployment steps](#deployment-steps)
-    - [Creating the infrastructure with Terraform](#creating-the-infrastructure-with-terraform)
-    - [Creating a sample Locust load testing script](#creating-a-sample-Locust-load-testing-script)
-    - [Creating a Kubernetes namespace](#creating-a-kubernetes-namespace)
-    - [Creating control and worker deployments](#creating-control-and-worker-deployments)
-        * [ConfigMap version](#configmap-version)
-        * [Custom Docker image version](#custom-docker-image-version)
-    - [Creating a ClusterIP service](#creating-a-clusterip-service)
-    - [Deploying the resources](#deploying-the-resources)
-5. [Deployment validation](#deployment-validation)
-7. [Accessing the Locust dashboard](#accessing-the-locust-dashboard)
-8. [Starting and stopping a test](#starting-and-stopping-a-test)
-9. [Increasing and decreasing load-generating worker pods](#increasing-and-decreasing-load-generating-worker-pods)
-10. [Cost considerations](#cost-considerations)
-    - [Pricing calculator](#pricing-calculator)
-    - [EKS Fargate and pod configuration costs](#eks-fargate-and-pod-configuration-costs)
-    - [NAT Gateway costs](#nat-gateway-costs)
-    - [Data transfer costs](#data-transfer-costs)
-11. [Cleanup](#cleanup-required)
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Deployment steps](#deployment-steps)
+    * [1. Creating the infrastructure with Terraform](#1-creating-the-infrastructure-with-terraform)
+    * [2. Creating a Locust load testing script](#2-creating-a-locust-load-testing-script)
+    * [3. Deploying the Kubernetes resource files](#3-deploying-the-kubernetes-resource-files)
+        + [3a. ConfigMap deployment](#3a-configmap-deployment)
+        + [3b. Custom Docker image deployment](#3b-custom-docker-image-deployment)
+    * [5. Creating a ClusterIP service](#5-creating-a-clusterip-service)
+    * [6. Deploying the resources](#-6deploying-the-resources)
+- [Deployment validation](#deployment-validation)
+- [Accessing the Locust dashboard](#accessing-the-locust-dashboard)
+- [Starting and stopping a test](#starting-and-stopping-a-test)
+- [Increasing and decreasing load-generating worker pods](#increasing-and-decreasing-load-generating-worker-pods)
+- [Cost considerations](#cost-considerations)
+    * [Pricing calculator](#pricing-calculator)
+    * [EKS Fargate and pod configuration costs](#eks-fargate-and-pod-configuration-costs)
+    * [NAT Gateway costs](#nat-gateway-costs)
+    * [Data transfer costs](#data-transfer-costs)
+- [Cleanup](#cleanup-required)
+
+</br>
 
 ## Overview
 
@@ -37,29 +37,7 @@ The architecture diagram above shows an EKS cluster that could span multiple ava
 
 Note that while multiple availability zones provide the design with high availability and resiliency—both AWS best practices—a load testing cluster might not necessarily need it. Given their purpose and temporary nature, environment failures or test disruptions have little to no effect; they do not serve live traffic, do not interact with live user data nor impact user experience, and failed tests can be restarted. Because of this, the architecture can be refactored into having a single availability zone housing all public and private subnets, further minimizing complexity and decreasing cost.
 
-### Cost
-
-This section is for a high-level cost estimate. Think of a likely straightforward scenario with reasonable assumptions based on the problem the Guidance is trying to solve. Provide an in-depth cost breakdown table in this section below ( you should use AWS Pricing Calculator to generate cost breakdown ).
-
-Start this section with the following boilerplate text:
-
-_You are responsible for the cost of the AWS services used while running this Guidance. As of <month> <year>, the cost for running this Guidance with the default settings in the <Default AWS Region (Most likely will be US East (N. Virginia)) > is approximately $<n.nn> per month for processing ( <nnnnn> records )._
-
-Replace this amount with the approximate cost for running your Guidance in the default Region. This estimate should be per month and for processing/serving resonable number of requests/entities.
-
-Suggest you keep this boilerplate text:
-_We recommend creating a [Budget](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) through [AWS Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance._
-
-### Sample Cost Table ( required )
-
-**Note : Once you have created a sample cost table using AWS Pricing Calculator, copy the cost breakdown to below table and upload a PDF of the cost estimation on BuilderSpace. Do not add the link to the pricing calculator in the ReadMe.**
-
-The following table provides a sample cost breakdown for deploying this Guidance with the default parameters in the US East (N. Virginia) Region for one month.
-
-| AWS service  | Dimensions | Cost [USD] |
-| ----------- | ------------ | ------------ |
-| Amazon API Gateway | 1,000,000 REST API calls per month  | $ 3.50month |
-| Amazon Cognito | 1,000 active users per month without advanced security feature | $ 0.00 |
+</br>
 
 ## Prerequisites
 
@@ -70,27 +48,104 @@ Please take the time to install the following dependencies and to make sure you 
 - [Kubectl](https://docs.aws.amazon.com/eks/latest/userguide/install-kubectl.html), a command-line tool used to interact with and manage Kubernetes clusters.
 - An IAM principal with the necessary privileges to run the provided Terraform scripts and create the resources.
 
-## Deployment Steps
+</br>
 
-Deployment steps must be numbered, comprehensive, and usable to customers at any level of AWS expertise. The steps must include the precise commands to run, and describe the action it performs.
+## Deployment steps
 
-* All steps must be numbered.
-* If the step requires manual actions from the AWS console, include a screenshot if possible.
-* The steps must start with the following command to clone the repo. ```git clone xxxxxxx```
-* If applicable, provide instructions to create the Python virtual environment, and installing the packages using ```requirement.txt```.
-* If applicable, provide instructions to capture the deployed resource ARN or ID using the CLI command (recommended), or console action.
+</br>
 
- 
-**Example:**
+### 1. Creating the infrastructure with Terraform
 
-1. Clone the repo using command ```git clone xxxxxxxxxx```
-2. cd to the repo folder ```cd <repo-name>```
-3. Install packages in requirements using command ```pip install requirement.txt```
-4. Edit content of **file-name** and replace **s3-bucket** with the bucket name in your account.
-5. Run this command to deploy the stack ```cdk deploy``` 
-6. Capture the domain name created by running this CLI command ```aws apigateway ............```
+The following Terraform files are provided:
 
+| Terraform File  | Purpose |
+| ------------- | ------------- |
+| 1-variables.tf | Defines the region, availability zones, subnets, cidr ranges, and names to be used when creating the infrastructure and resources. Should be customized to better suit your needs |
+| 2-providers.tf | Specifies information about the plugins that allow Terraform to interact with different platforms, services, and infrastructure components |
+| 3-vpc.tf | Creates a dedicated load testing VPC and the VPC's default security group |
+| 4-subnets.tf | Outlines the public and private subnets to create |
+| 5-gateways.tf | Creates the Internet Gateway, NAT Gatewaysm and Elastic IPs used |
+| 6-route-tables.tf | Specifies route tables for the subnets and the approprate routes to the Internet Gatewat and NAT Gateways |
+| 7-eks.tf | Creates the Amazon EKS cluster and requires components |
+| 8-fargate-profile.tf | Sets up the Fargate profile that defines the namespace and private subnets that workloads are to be launched in |
 
+Once files have been customized (if needed), open the terminal and navigate to the folder containing the terraform configuration files. Verify beforehand that calling ```aws sts get-caller-identity``` returns the IAM principal you intend to use and has the necessary permissions to build the infrastructure.
+
+Initialize the directory with ```terraform init```. This will download and install the providers used in the files. As a best practice, verify that the configuration files are syntactically valid and internally consistent with the ```terraform validate``` command.
+
+When ready, apply the configuration and start creating the resources via ```terraform apply```. Before applying any changes, Terraform will print out the details of the plan and the resources it intends to create, update, and destroy. Confirm by typing ```yes``` when prompted, and Terraform will start to create the resources. The process should take around 30 minutes to finish.
+
+> [!NOTE]
+> It’s possible for a timeout error to occur near the end, related to the deployment of CoreDNS pods
+
+```
+Error: waiting for EKS Add-On (load-testing-eks-cluster:coredns) create: timeout while waiting for state to become 'ACTIVE' (last state: 'DEGRADED', timeout: 20m0s)
+
+   with aws_eks_addon.coredns,
+   on 8-fargate-profile.tf line 64, in resource "aws_eks_addon" "coredns":
+   64: resource "aws_eks_addon" "coredns" {
+```
+
+If encountered, simply run ```terraform apply``` again. Terraform will focus only on the resources that are missing. It will re-deploy the CoreDNS pods, and should be successful the second time after a few minutes.
+
+</br>
+
+### 2. Creating a Locust load testing script
+
+Locust load testing scripts are written in [Python](https://www.python.org/), a high-level, general-purpose programming language. Locust scripts benefit from being able to define flexible scenarios that take advantage of thousands of powerful third-party libraries, while remaining familiar and easy to read.
+
+Learning to create complex Locust scripts falls outside the scope of this guide, but the [official documentation site for Locust](https://docs.locust.io/en/stable/quickstart.html) provides detailed information and script examples to get your journey started.
+
+For the purposes of this guide, two sample scripts are used to illustrate how to define multiple test scripts. They issue a single GET request to a relative endpoint, as the target host is specified later in the control deployment file:
+
+```
+from locust import HttpUser, task, between
+
+class test(HttpUser):
+    wait_time = between(1, 3)
+
+    @task
+    def initial_request(self):
+        self.client.get("/")
+```
+
+Depending on the deployment method used, the script will be included later through a ConfigMap file, or be added into a custom Docker image. In any case, **a custom load testing script that accurately simulates the real-world traffic patterns and user behavior of the system being tested must be created and provided**, as the quality and accuracy of the load testing results are heavily influenced by it.
+
+</br>
+
+### 3. Deploying the Kubernetes resource files 
+            
+The following Kubernetes resources files are provided:
+
+| Kubernetes Resource File  | Purpose |
+| ------------- | ------------- |
+| namespace.yaml | Creates the namespace in the EKS cluster where the control and worker pods will be launched |
+| control-deployment.yaml | Specifies the deployment configuration of and resources needed by the control pod |
+| control-service.yaml | Defines the ClusterIP service to create to enable communication within the cluster |
+| worker-deployment.yaml | Specifies the deployment configuration of and resources needed by the worker pods |
+| configmap.yaml | (If using ConfigMap deployment) Defines the load testing script to use |
+| Dockerfile | (If using custom image deployment) File describing the base Locust Docker image to use, and load testing scripts to include when creating the custom Docker image |
+| script1.py / script2.py | (If using custom image deployment) Sample load testing scripts, to be replaced with custom scripts |
+
+There are many ways to create deployments. This guide focuses on two:
+- Using **ConfigMap** to provide the Pods with the Locust load testing script, and
+- Building a custom **Docker image** from the base Locust image, containing multiple Locust testing scripts inside.
+
+The first approach might be useful when dealing with one or more small scripts that might change frequently, while the second might be better suited for dealing with multiple large, static scripts for prolonged tests.
+
+</br>
+
+### 3a. ConfigMap deployment
+
+TBD
+
+</br>
+
+### 3b. Custom Docker image deployment
+
+TBD
+
+</br>
 
 ## Deployment Validation  (required)
 
