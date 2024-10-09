@@ -10,8 +10,7 @@
     * [3. Configuring the Kubernetes resource files](#3-configuring-the-kubernetes-resource-files)
         + [3a. ConfigMap deployments](#3a-configmap-deployments)
         + [3b. Custom Docker image deployments](#3b-custom-docker-image-deployments)
-    * [5. Creating a ClusterIP service](#5-creating-a-clusterip-service)
-    * [6. Deploying the resources](#-6deploying-the-resources)
+    * [4. Deploying the resources](#4-deploying-the-resources)
 - [Deployment validation](#deployment-validation)
 - [Accessing the Locust dashboard](#accessing-the-locust-dashboard)
 - [Starting and stopping a test](#starting-and-stopping-a-test)
@@ -21,7 +20,7 @@
     * [EKS Fargate and pod configuration costs](#eks-fargate-and-pod-configuration-costs)
     * [NAT Gateway costs](#nat-gateway-costs)
     * [Data transfer costs](#data-transfer-costs)
-- [Cleanup](#cleanup-required)
+- [Clean up](#clean-up)
 
 </br>
 
@@ -138,14 +137,19 @@ There are many ways to create deployments. This guide focuses on two:
 
 ### 3a. ConfigMap deployments
 
-In ConfigMap deployments, the load testing script is provided to the Locust client via a Kubernetes resource file called **ConfigMap**. This approach might be particularly useful when dealing with relatively small scripts that are frequently changing. As seen in the ```source/kubernetes-configmap-version/configmap.yaml``` file, the scripts are defined as key value pairs (```script1``` and ```script2```) and multiple scripts can be added to the same ConfigMap file.
+In ConfigMap deployments, the load testing script is provided to the Locust client via a Kubernetes resource file called **ConfigMap**. This approach might be particularly useful when dealing with relatively small scripts that are frequently changing. Navigate to the ```source/kubernetes-configmap-version/``` directory in the terminal.
+As seen in the ```configmap.yaml``` file, the scripts are defined as key value pairs (```script1``` and ```script2```), and multiple scripts can be added to the same ConfigMap file.
 
 > [!IMPORTANT]
-> Remember to replace the sample load testing scripts with your own, tailored specifically for the system you are testing.
+> Remember to replace the sample load testing scripts with your own in the ConfigMap, tailored specifically for the system you are testing.
 
-The deployments files for the control and worker pods (```source/kubernetes-configmap-version/control-deployment.yaml``` and ```source/kubernetes-configmap-version/worker-deployment.yaml```) map the ConfigMap to a volume and mount the volume on the container. The key in the ConfigMap associated with the desired script is specified, as is the location in the volume to save it to.
+The deployments files for the control and worker pods (```control-deployment.yaml``` and ```worker-deployment.yaml```) map the ConfigMap to a volume and mount the volume on the container. The key in the ConfigMap associated with the desired script is specified, as is the location in the volume to save it to. Lastly, the path of the script saved to the volume in the container is passed to the Locust client when initialized.
 
-Lastly, the path of the script saved to the volume in the container is passed to the Locust client when initialized.
+**Remember to:**
+- Add your load testing scripts to the ConfigMap
+- If you change the key names in the ConfigMap, update the ```subPath``` field in both deployment files
+- If you change the value of ```mounthPath``` in the deployment files, update the ```-f``` argument with the new path when initializing the container in the deployment files
+- Change the ```-H``` argument in the container initialization for the control deployment with the host url you are testing
 
 </br>
 
@@ -156,15 +160,15 @@ In custom Docker image deployments, a Docker image is created from the official 
 - Install [Docker](https://docs.docker.com/desktop/install/) to be able to build, run and manage Docker containers and images.
 - Create an [Elastic Container Registry (ECR) repository](https://aws.amazon.com/ecr/) to be able to store and deploy Docker container images within the AWS ecosystem. Create a private ECR repository and give it the name ```locust```. Note that ECR provides a free tier of the service and no charges will be incurred as a result of this step. 
 
-The Docker file (```source/kubernetes-custom-image-version/Dockerfile```) defines the base image to use (```locustio/locust:master```) and the load testing scripts to include. Once your scripts are added to the Dockerfile, build the image by opening a new terminal window, navigating to the folder that contains your Dockerfile and test scripts, and run 
+Navigate to the ```source/kubernetes-custom-image-version/``` folder in the terminal. The ```Dockerfile``` defines the base image to use (```locustio/locust:master```) and the load testing scripts to include. You will find two sample load test scripts, ```script1.py``` and ```script2.py```. These should be replaced with your own custom load testing scripts, and they should be added in the Dockerfile. Build the image by running: 
 ```
 docker build -f ./Dockerfile --platform linux/amd64 -t locust:master .
 ``` 
-Next, tag your newly created image. **Make sure you add your locust ECR registry’s URI to the command below**:
+Tag your newly created image next. **Make sure you add your locust ECR registry’s URI to the command below**:
 ```
 docker tag locust:master 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
 ```
-Now that our image has been created and tagged, we need to make sure that our Docker client is authenticated with our ECR registry before we attempt to push the image. **Make sure you change the region and base ECR registry URI to match yours before entering the command in the terminal**:
+Now that the image has been created and tagged, the Docker client needs to authenticate with the ECR registry before attempting to push the image. **Make sure you change the region and base ECR registry URI to match yours before running the commandl**:
 ```
 aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 111122223333.dkr.ecr.us-east-2.amazonaws.com
 ```
@@ -173,92 +177,100 @@ Push the image to the ECR registry after successfully authenticating. **Make sur
 docker push 111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master
 ```
 
-
-
-
-
-
-
-
+**Remember to:**
+- Replace ```script1.py``` and ```script2.py``` with your own load testing scripts
+- Properly reference your new scripts in the ```Dockerfile``` so they are bundled in the image
+- Update the ```image``` field in both deployment files to point to your image on ECR (e.g. ```111122223333.dkr.ecr.us-east-2.amazonaws.com/locust:master```)
+- Change the ```-H``` argument in the container initialization for the control deployment with the host url you are testing
 
 </br>
 
-## Deployment Validation  (required)
+### 4. Deploying the resources
 
-<Provide steps to validate a successful deployment, such as terminal output, verifying that the resource is created, status of the CloudFormation template, etc.>
+After configuring the files, the resources can be deployed to the EKS Fargate cluster. Ensure the [kubeconfig file is created/updated](https://docs.aws.amazon.com/eks/latest/userguide/create-kubeconfig.html) with the cluster’s information with the command below. **Make sure you update the region and the cluster's name if different.**
+```
+aws eks update-kubeconfig --region us-east-2 --name load-testing-eks-cluster
+```
+After successfully creating/updating the kubeconfig file, we can apply the configuration changes from all the yaml files in our current directory at once using the following command:
+```
+kubectl apply -f .
+```
+The deployment should start immediately and take one or two minutes to complete.
 
+</br>
 
-**Examples:**
+## Deployment validation
 
-* Open CloudFormation console and verify the status of the template with the name starting with xxxxxx.
-* If deployment is successful, you should see an active database instance with the name starting with <xxxxx> in        the RDS console.
-*  Run the following CLI command to validate the deployment: ```aws cloudformation describe xxxxxxxxxxxxx```
-
-
-
-## Running the Guidance (required)
-
-<Provide instructions to run the Guidance with the sample data or input provided, and interpret the output received.> 
-
-This section should include:
-
-* Guidance inputs
-* Commands to run
-* Expected output (provide screenshot if possible)
-* Output description
+You can keep track of the status of the deployment and pods with the following command:
+```
+kubectl get pods -A
 
 
-
-## Next Steps (required)
-
-Provide suggestions and recommendations about how customers can modify the parameters and the components of the Guidance to further enhance it according to their requirements.
-
-
-## Cleanup (required)
-
-- Include detailed instructions, commands, and console actions to delete the deployed Guidance.
-- If the Guidance requires manual deletion of resources, such as the content of an S3 bucket, please specify.
-
-
-
-## FAQ, known issues, additional considerations, and limitations (optional)
+NAMESPACE     NAME                              READY   STATUS    RESTARTS   AGE
+kube-system   coredns-78f8b4b9dd-n2kwg          1/1     Running   0          45h
+kube-system   coredns-78f8b4b9dd-rw8t9          1/1     Running   0          45h
+locust        locust-control-6f4b76c45f-wfm7r   0/1     Pending   0          1m12s
+locust        locust-worker-7fd7bdb544-9rsz6    1/1     Running   0          1m12s
+locust        locust-worker-7fd7bdb544-c6w55    1/1     Running   0          1m12s
+```
+If needed, the events dispatched by the pods can be displayed and followed with (press ```ctrl``` + ```c``` to exit):
+```
+kubectl get events -n locust -w
 
 
-**Known issues (optional)**
+LAST SEEN  TYPE    REASON             OBJECT                                 MESSAGE
+32s        Normal  SuccessfulCreate   replicaset/locust-control-6f4b76c45f   Created pod: locust-control-6f4b76c45f-wfm7r
+32s        Normal  ScalingReplicaSet  deployment/locust-control              Scaled up replica set locust-control-6f4b76c45f to 1
+50s        Normal  Scheduled          pod/locust-worker-7fd7bdb544-9rsz6     Successfully assigned locust/locust-worker-7fd7bdb544-9rsz6 to fargate-ip-192-168-166-239.us-east-2.compute.internal
+...
+```
+You can monitor the locust-control pod to see when the endpoints get assigned (due to the ClusterIP service deployed) with the following command:
 
-<If there are common known issues, or errors that can occur during the Guidance deployment, describe the issue and resolution steps here>
+% kubectl get endpoints -n locust
+
+NAME             ENDPOINTS                                 AGE
+locust-control   192.168.111.61:5557,192.168.111.61:8089   4m20s
+...
+
+</br>
+
+## Accessing the Locust dashboard
+
+</br>
+
+## Starting and stopping a test
+
+</br>
+
+## Increasing and decreasing load-generating worker pods
+
+</br>
+
+## Cost considerations
+
+</br>
+
+## Cost considerations
+
+</br>
+
+### Pricing calculator
+
+</br>
+
+### EKS Fargate and pod configuration costs
+
+</br>
+
+### NAT Gateway costs
+
+</br>
+
+### Data transfer costs
+
+</br>
+
+## Clean up
 
 
-**Additional considerations (if applicable)**
 
-<Include considerations the customer must know while using the Guidance, such as anti-patterns, or billing considerations.>
-
-**Examples:**
-
-- “This Guidance creates a public AWS bucket required for the use-case.”
-- “This Guidance created an Amazon SageMaker notebook that is billed per hour irrespective of usage.”
-- “This Guidance creates unauthenticated public API endpoints.”
-
-
-Provide a link to the *GitHub issues page* for users to provide feedback.
-
-
-**Example:** *“For any feedback, questions, or suggestions, please use the issues tab under this repo.”*
-
-## Revisions (optional)
-
-Document all notable changes to this project.
-
-Consider formatting this section based on Keep a Changelog, and adhering to Semantic Versioning.
-
-## Notices (optional)
-
-Include a legal disclaimer
-
-**Example:**
-*Customers are responsible for making their own independent assessment of the information in this Guidance. This Guidance: (a) is for informational purposes only, (b) represents AWS current product offerings and practices, which are subject to change without notice, and (c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided “as is” without warranties, representations, or conditions of any kind, whether express or implied. AWS responsibilities and liabilities to its customers are controlled by AWS agreements, and this Guidance is not part of, nor does it modify, any agreement between AWS and its customers.*
-
-
-## Authors (optional)
-
-Name of code contributors
