@@ -1,4 +1,4 @@
-# Simple & Scalable Serverless Load Testing on AWS
+# Kubernetes-based Game Load Testing on AWS
 
 ## Table of Contents
 
